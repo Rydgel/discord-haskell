@@ -116,7 +116,7 @@ query section apiMethod request = do
 query' :: (FromJSON a) => T.Text -> T.Text -> Value -> DiscordT m a
 query' section apiMethod request = do
   config <- ask
-  initReq <- liftIO $ parseUrlThrow "https://api.discordapp.com/api/channels/1"
+  initReq <- liftIO $ parseUrlThrow "https://discordapp.com/api/channels/1"
   let req = initReq { requestBody = RequestBodyLBS $ encode request
                     , method = methodPost
                     }
