@@ -4,12 +4,22 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Discord
-    ( DiscordConfig(..)
+    ( runDiscordT
+    , runDiscord
+    , runDiscordLogging
+    , DiscordConfig(..)
+    , askApiKey
+    , defaultDiscordConfig
+    , DiscordApiKey(..)
+    , DiscordError(..)
+    , query
+    , query'
     ) where
 
 
+import Control.Exception (SomeException)
 import Control.Exception.Base (Exception)
-import Control.Exception.Lifted (throwIO, catch)
+import Control.Exception.Lifted (throwIO, catch, try)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Logger (logDebug, LoggingT, runStderrLoggingT, MonadLogger, NoLoggingT(..))
 import Control.Monad.Trans.Control (MonadBaseControl)
@@ -84,29 +94,29 @@ headerDiscordKey (DiscordApiKey apiKey apiType) =
   apiType <> " " <> apiKey
 
 userAgent :: T.Text
-userAgent = "DiscordBot (https://github.com/Rydgel/discord-haskell, v0.1.0.0) Haskell"
+userAgent = "DiscordBot (https://github.com/Rydgel/discord-haskell, v0.1.0.0)"
 
 
 -- | Perform a query to Discord. Should only be necessary to call directly for
 --   unimplemented methods. If you infer a return type of Value you will get the
 --   raw JSON object or array. Automatically adds apikey to the request.
-query :: (FromJSON x) => T.Text
+query :: (FromJSON a) => T.Text
       -- ^ Discord API section
       -> T.Text
       -- ^ Discord API method
       -> [Pair]
       -- ^ Request info
-      -> DiscordT m x
+      -> DiscordT m (Either DiscordError a)
 query section apiMethod request = do
   apikey <- dakApiKey <$> askApiKey
-  query' section apiMethod $ filterObject ("apikey" .= apikey : request)
+  try $ query' section apiMethod $ filterObject ("apikey" .= apikey : request)
 
 -- | Perform a query to Discord. Should only be necessary to call directly for
 --   unimplemented methods.
-query' :: (FromJSON x) => T.Text -> T.Text -> Value -> DiscordT m x
+query' :: (FromJSON a) => T.Text -> T.Text -> Value -> DiscordT m a
 query' section apiMethod request = do
   config <- ask
-  initReq <- liftIO $ parseUrlThrow "http://www.google.fr"
+  initReq <- liftIO $ parseUrlThrow "https://api.discordapp.com/api/channels/1"
   let req = initReq { requestBody = RequestBodyLBS $ encode request
                     , method = methodPost
                     }
@@ -115,43 +125,41 @@ query' section apiMethod request = do
   $(logDebug) $ T.pack . show $ responseBody response
   case decode $ responseBody response of
     Just result -> return result
-    Nothing -> throwIO $ OtherDiscordError (-1) "ParseError" "Could not parse result JSON from Discord"
+    Nothing -> throwIO $ OtherDiscordError (-1) "Could not parse result JSON from Discord"
 
+-- | todo Add all cases possible if you want
 catchHttpException :: HttpException -> DiscordT m a
 catchHttpException e@(StatusCodeException _ headers _) = do
   $(logDebug) $ T.pack . show $ lookup "X-Response-Body-Start" headers
-  maybe (throwIO e) throwIO (decodeError headers)
-catchHttpException e = throwIO e
+  let cantParseError = OtherDiscordError (-1) "Could not parse result JSON from Discord"
+  maybe (throwIO cantParseError) throwIO (decodeError headers)
+catchHttpException e = throwIO $ BadRequest 0 "Bad Request"
 
 decodeError :: ResponseHeaders -> Maybe DiscordError
 decodeError headers = fromStrict <$> lookup "X-Response-Body-Start" headers >>= decode
 
-
-data DiscordError = InvalidApiKey Int T.Text T.Text
-
-                  | OtherDiscordError Int T.Text T.Text
+data DiscordError = BadRequest Int T.Text
+                  | OtherDiscordError Int T.Text
   deriving (Typeable, Show, Eq)
 
 instance Exception DiscordError
 
 instance FromJSON DiscordError where
   parseJSON (Object v) = do
-    status <- v .: "status"
-    when (status /= ("error" :: T.Text)) mzero
-    name <- v .: "name"
     code <- v .: "code"
-    message <- v .: "error"
-    return $ errConstructor name code name message
+    message <- v .: "message"
+    return $ errConstructor code message
    where
-      errConstructor name = case (name :: T.Text) of
-        "Invalid_ApiKey" -> InvalidApiKey
-        _                -> OtherDiscordError
+      errConstructor code message = case (code :: Int) of
+        0 -> BadRequest code message
+        _ -> OtherDiscordError code message
   parseJSON _ = mzero
 
 
 
 -- move that
 -- | Creates Aeson objects after filtering to remove null values.
+filterObject :: [Pair] -> Value
 filterObject list =
   object $ filter notNothing list
  where
