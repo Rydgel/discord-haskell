@@ -1,43 +1,48 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
 
 module Discord
     ( runDiscordT
     , runDiscord
     , runDiscordLogging
-    , DiscordConfig(..)
+    , DiscordConfig (..)
     , askApiKey
     , defaultDiscordConfig
-    , DiscordApiKey(..)
-    , DiscordError(..)
+    , DiscordApiKey (..)
+    , DiscordError (..)
     , query
     , query'
     ) where
 
 
-import Control.Exception (SomeException)
-import Control.Exception.Base (Exception)
-import Control.Exception.Lifted (throwIO, catch, try)
-import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.Logger (logDebug, LoggingT, runStderrLoggingT, MonadLogger, NoLoggingT(..))
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Monad.Trans.Resource (runResourceT)
-import Network.HTTP.Client (parseUrlThrow, newManager, httpLbs, RequestBody(..), Response(..), HttpException(..), Request(..), Manager)
-import Network.HTTP.Types (methodPost)
-import Network.HTTP.Types.Header (ResponseHeaders)
-import Network.HTTP.Client.TLS (tlsManagerSettings)
-import Control.Monad.Reader (ReaderT, MonadReader, runReaderT, ask)
-import qualified Data.Text as T
-import Control.Applicative ((<$>))
-import Data.Monoid ((<>))
-import Control.Monad (mzero, MonadPlus, when)
-import Data.Typeable (Typeable)
-import Data.Aeson (FromJSON(..), (.:), Value(..), decode, (.=), object)
-import Data.Aeson.Types (Pair)
-import Data.Aeson.Encode (encode)
-import Data.ByteString.Lazy (fromStrict)
+import           Control.Exception.Base      (Exception)
+import           Control.Exception.Lifted    (catch, throwIO, try)
+import           Control.Monad               (mzero)
+import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.Logger        (LoggingT, MonadLogger,
+                                              NoLoggingT (..), logDebugN,
+                                              runStderrLoggingT)
+import           Control.Monad.Reader        (ReaderT, ask, runReaderT)
+import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Data.Aeson                  (FromJSON (..), Value (..), decode,
+                                              object, (.:), (.=))
+import           Data.Aeson.Encode           (encode)
+import           Data.Aeson.Types            (Pair)
+import qualified Data.ByteString.Char8       as BS
+import           Data.ByteString.Lazy        (fromStrict)
+import qualified Data.CaseInsensitive        as CI
+import           Data.Monoid                 ((<>))
+import qualified Data.Text                   as T
+import           Data.Typeable               (Typeable)
+import           Network.HTTP.Client         (HttpException (..), Manager,
+                                              Request (..), RequestBody (..),
+                                              Response (..), httpLbs,
+                                              newManager, parseUrlThrow)
+import           Network.HTTP.Client.TLS     (tlsManagerSettings)
+import           Network.HTTP.Types          (Header, methodPost)
+import           Network.HTTP.Types.Header   (ResponseHeaders)
 
 
 data DiscordConfig = DiscordConfig
@@ -64,12 +69,12 @@ runDiscordT config action =
   runReaderT action config
 
 -- | Runs Discord in IO, ignoring the existing monadic context and without logging.
-runDiscord :: (MonadIO m) => (DiscordConfig -> DiscordT (NoLoggingT IO) a -> m a)
+runDiscord :: MonadIO m => (DiscordConfig -> DiscordT (NoLoggingT IO) a -> m a)
 runDiscord config action =
   liftIO $ runNoLoggingT $ runReaderT action config
 
 -- | Runs Discord in IO, ignoring the existing monadic context and logging to stderr.
-runDiscordLogging :: (MonadIO m) => (DiscordConfig -> DiscordT (LoggingT IO) a -> m a)
+runDiscordLogging :: MonadIO m => (DiscordConfig -> DiscordT (LoggingT IO) a -> m a)
 runDiscordLogging config action =
   liftIO $ runStderrLoggingT $ runReaderT action config
 
@@ -97,10 +102,13 @@ userAgent :: T.Text
 userAgent = "DiscordBot (https://github.com/Rydgel/discord-haskell, v0.1.0.0)"
 
 
+prepHeader :: (String, String) -> Header
+prepHeader (h, v) = (CI.mk $ BS.pack h, BS.pack v)
+
 -- | Perform a query to Discord. Should only be necessary to call directly for
 --   unimplemented methods. If you infer a return type of Value you will get the
 --   raw JSON object or array. Automatically adds apikey to the request.
-query :: (FromJSON a) => T.Text
+query :: FromJSON a => T.Text
       -- ^ Discord API section
       -> T.Text
       -- ^ Discord API method
@@ -113,16 +121,16 @@ query section apiMethod request = do
 
 -- | Perform a query to Discord. Should only be necessary to call directly for
 --   unimplemented methods.
-query' :: (FromJSON a) => T.Text -> T.Text -> Value -> DiscordT m a
+query' :: FromJSON a => T.Text -> T.Text -> Value -> DiscordT m a
 query' section apiMethod request = do
   config <- ask
   initReq <- liftIO $ parseUrlThrow "https://discordapp.com/api/channels/1"
   let req = initReq { requestBody = RequestBodyLBS $ encode request
                     , method = methodPost
                     }
-  $(logDebug) $ T.pack . show $ req
+  logDebugN $ T.pack . show $ req
   response <- catch (liftIO (httpLbs req $ dcManager config)) catchHttpException
-  $(logDebug) $ T.pack . show $ responseBody response
+  logDebugN $ T.pack . show $ responseBody response
   case decode $ responseBody response of
     Just result -> return result
     Nothing -> throwIO $ OtherDiscordError (-1) "Could not parse result JSON from Discord"
@@ -130,7 +138,7 @@ query' section apiMethod request = do
 -- | todo Add all cases possible if you want
 catchHttpException :: HttpException -> DiscordT m a
 catchHttpException e@(StatusCodeException _ headers _) = do
-  $(logDebug) $ T.pack . show $ lookup "X-Response-Body-Start" headers
+  logDebugN $ T.pack . show $ lookup "X-Response-Body-Start" headers
   let cantParseError = OtherDiscordError (-1) "Could not parse result JSON from Discord"
   maybe (throwIO cantParseError) throwIO (decodeError headers)
 catchHttpException e = throwIO $ BadRequest 0 "Bad Request"

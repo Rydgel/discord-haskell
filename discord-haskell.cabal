@@ -2,12 +2,12 @@ name:                discord-haskell
 version:             0.1.0.0
 synopsis:            Initial project template from stack
 description:         Please see README.md
-homepage:            https://github.com/githubuser/discord-haskell#readme
+homepage:            https://github.com/Rydgel/discord-haskell#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Author name here
-maintainer:          example@example.com
-copyright:           2016 Author name here
+maintainer:          jerome.mahuet@gmail.com
+copyright:           2016 Jérôme Mahuet
 category:            Web
 build-type:          Simple
 -- extra-source-files:
@@ -16,6 +16,9 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Discord
+                     , Discord.Channel
+                     , Discord.Permission
+                     , Discord.User
   build-depends:       base >= 4.7 && < 5
                      , text
                      , aeson
@@ -33,6 +36,7 @@ library
                      , data-default
                      , lifted-base
                      , lens
+                     , case-insensitive
   default-language:    Haskell2010
 
 executable discord-haskell-exe
