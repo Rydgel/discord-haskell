@@ -21,13 +21,13 @@ data Permission = Permission
 -- todo JSON
 
 data Role = Role
-  { rId :: !String
-  , rName :: !String
-  , rColor :: !Int
-  , rHoist :: !Bool
-  , rPosition :: !Int
+  { rId          :: !String
+  , rName        :: !String
+  , rColor       :: !Int
+  , rHoist       :: !Bool
+  , rPosition    :: !Int
   , rPermissions :: !Int
-  , rManaged :: !Bool
+  , rManaged     :: !Bool
   , rMentionable :: !Bool
   }
   deriving (Show)
