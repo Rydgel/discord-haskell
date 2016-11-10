@@ -32,7 +32,7 @@ data UserGuild = UserGuild
   deriving (Show)
 
 -- todo Json
-
+type IntegrationObject = String
 data ConnectionObject = ConnectionObject
   { coId           :: !String
   , coName         :: !String
