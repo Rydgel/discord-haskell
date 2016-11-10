@@ -51,7 +51,7 @@ data DiscordConfig = DiscordConfig
   }
 
 -- | Convenience method to ask ReaderT for the current API key.
-askApiKey :: DiscordT m DiscordApiKey
+askApiKey :: MonadIO m => ReaderT DiscordConfig m DiscordApiKey
 askApiKey = dcApiKey <$> ask
 
 -- | Creates a DiscordConfig with a new Manager.
