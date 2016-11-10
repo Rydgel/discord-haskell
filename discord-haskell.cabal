@@ -19,6 +19,7 @@ library
                      , Discord.Channel
                      , Discord.Permission
                      , Discord.User
+                     , Discord.Guild
   build-depends:       base >= 4.7 && < 5
                      , text
                      , aeson

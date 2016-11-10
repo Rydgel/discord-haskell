@@ -1,11 +1,44 @@
 module Discord.User
     ( User (..)
+    , UserGuild (..)
+    , ConnectionObject (..)
     ) where
 
 
-data User = User
-  {
+import           Data.Aeson
+import           Discord.Guild
 
+data User = User
+  { uId            :: !String
+  , uUsername      :: !String
+  , uDiscriminator :: !String
+  , uAvatar        :: !String
+  , uBot           :: !Bool
+  , uMfaEnabled    :: !Bool
+  , uVerified      :: !Bool
+  , uEmail         :: !String
+  }
+  deriving (Show)
+
+-- todo Json
+
+data UserGuild = UserGuild
+  { ugId         :: !String
+  , uName        :: !String
+  , uIcon        :: !String
+  , uOwner       :: !Bool
+  , uPermissions :: !Int
+  }
+  deriving (Show)
+
+-- todo Json
+
+data ConnectionObject = ConnectionObject
+  { coId           :: !String
+  , coName         :: !String
+  , coType         :: !String
+  , coRevoked      :: !Bool
+  , coIntegrations :: ![IntegrationObject]
   }
   deriving (Show)
 
