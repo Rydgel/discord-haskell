@@ -10,7 +10,6 @@ module Discord
     , DiscordConfig (..)
     , askApiKey
     , defaultDiscordConfig
-    , DiscordApiKey (..)
     , DiscordError (..)
     , query
     , query'
@@ -36,6 +35,7 @@ import qualified Data.CaseInsensitive        as CI
 import           Data.Monoid                 ((<>))
 import qualified Data.Text                   as T
 import           Data.Typeable               (Typeable)
+import           Discord.Token
 import           Network.HTTP.Client         (HttpException (..), Manager,
                                               Request (..), RequestBody (..),
                                               Response (..), httpLbs,
@@ -45,62 +45,41 @@ import           Network.HTTP.Types          (Header, methodPost)
 import           Network.HTTP.Types.Header   (ResponseHeaders)
 
 
-data DiscordConfig = DiscordConfig
-  { dcApiKey  :: DiscordApiKey
+data DiscordConfig a = DiscordConfig
+  { dcApiKey  :: Token a => a
   , dcManager :: Manager
   }
 
 -- | Convenience method to ask ReaderT for the current API key.
-askApiKey :: MonadIO m => ReaderT DiscordConfig m DiscordApiKey
+askApiKey :: (MonadIO m, Token t) => ReaderT (DiscordConfig t) m t
 askApiKey = dcApiKey <$> ask
 
 -- | Creates a DiscordConfig with a new Manager.
-defaultDiscordConfig :: MonadIO m => DiscordApiKey -> m DiscordConfig
+defaultDiscordConfig :: (MonadIO m, Token t) => t -> m (DiscordConfig t)
 defaultDiscordConfig apiKey = do
   man <- liftIO $ newManager tlsManagerSettings
   return $ DiscordConfig apiKey man
 
 -- | The Discord monad, which supports exception and logging
-type DiscordT m a = (MonadIO m, MonadLogger m, MonadBaseControl IO m) => ReaderT DiscordConfig m a
+type DiscordT t m a = (MonadIO m, MonadLogger m, MonadBaseControl IO m) => ReaderT (DiscordConfig t) m a
 
 -- | Runs Discord in a monad transformer.
-runDiscordT :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => DiscordConfig -> DiscordT m a -> m a
+runDiscordT :: (MonadIO m, MonadLogger m, MonadBaseControl IO m, Token t) => DiscordConfig t -> DiscordT t m a -> m a
 runDiscordT config action =
   runReaderT action config
 
 -- | Runs Discord in IO, ignoring the existing monadic context and without logging.
-runDiscord :: MonadIO m => (DiscordConfig -> DiscordT (NoLoggingT IO) a -> m a)
+runDiscord :: (MonadIO m, Token t) => (DiscordConfig t -> DiscordT t (NoLoggingT IO) a -> m a)
 runDiscord config action =
   liftIO $ runNoLoggingT $ runReaderT action config
 
 -- | Runs Discord in IO, ignoring the existing monadic context and logging to stderr.
-runDiscordLogging :: MonadIO m => (DiscordConfig -> DiscordT (LoggingT IO) a -> m a)
+runDiscordLogging :: (MonadIO m, Token t) => (DiscordConfig t -> DiscordT t (LoggingT IO) a -> m a)
 runDiscordLogging config action =
   liftIO $ runStderrLoggingT $ runReaderT action config
 
--- | Represents a Discord API key, which implicitly includes a type (bot/bearer).
-data DiscordApiKey = DiscordApiKey
-  { dakApiKey :: T.Text -- Full API key including
-  , dakType   :: T.Text -- Bot or Bearer
-  }
-  deriving (Show, Eq)
-
--- | Create a DiscordApiKey from Text
--- | todo response parsing
-discordKey :: T.Text -> T.Text -> DiscordApiKey
-discordKey apiKey apiType =
-  DiscordApiKey
-    { dakApiKey = apiKey
-    , dakType = apiType
-    }
-
-headerDiscordKey :: DiscordApiKey -> T.Text
-headerDiscordKey (DiscordApiKey apiKey apiType) =
-  apiType <> " " <> apiKey
-
 userAgent :: T.Text
 userAgent = "DiscordBot (https://github.com/Rydgel/discord-haskell, v0.1.0.0)"
-
 
 prepHeader :: (String, String) -> Header
 prepHeader (h, v) = (CI.mk $ BS.pack h, BS.pack v)
@@ -108,20 +87,21 @@ prepHeader (h, v) = (CI.mk $ BS.pack h, BS.pack v)
 -- | Perform a query to Discord. Should only be necessary to call directly for
 --   unimplemented methods. If you infer a return type of Value you will get the
 --   raw JSON object or array. Automatically adds apikey to the request.
-query :: FromJSON a => T.Text
+query :: (FromJSON a, Token t)
+      => T.Text
       -- ^ Discord API section
       -> T.Text
       -- ^ Discord API method
       -> [Pair]
       -- ^ Request info
-      -> DiscordT m (Either DiscordError a)
+      -> DiscordT t m (Either DiscordError a)
 query section apiMethod request = do
-  apikey <- dakApiKey <$> askApiKey
-  try $ query' section apiMethod $ filterObject ("apikey" .= apikey : request)
+  apikey <- askApiKey
+  try $ query' section apiMethod $ filterObject ("apikey" .= toHeader apikey : request)
 
 -- | Perform a query to Discord. Should only be necessary to call directly for
 --   unimplemented methods.
-query' :: FromJSON a => T.Text -> T.Text -> Value -> DiscordT m a
+query' :: FromJSON a => T.Text -> T.Text -> Value -> DiscordT t m a
 query' section apiMethod request = do
   config <- ask
   initReq <- liftIO $ parseUrlThrow "https://discordapp.com/api/channels/1"
@@ -136,7 +116,7 @@ query' section apiMethod request = do
     Nothing -> throwIO $ OtherDiscordError (-1) "Could not parse result JSON from Discord"
 
 -- | todo Add all cases possible if you want
-catchHttpException :: HttpException -> DiscordT m a
+catchHttpException :: HttpException -> DiscordT t m a
 catchHttpException e@(StatusCodeException _ headers _) = do
   logDebugN $ T.pack . show $ lookup "X-Response-Body-Start" headers
   let cantParseError = OtherDiscordError (-1) "Could not parse result JSON from Discord"
