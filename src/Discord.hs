@@ -32,7 +32,6 @@ import           Data.Aeson.Types            (Pair)
 import qualified Data.ByteString.Char8       as BS
 import           Data.ByteString.Lazy        (fromStrict)
 import qualified Data.CaseInsensitive        as CI
-import           Data.Monoid                 ((<>))
 import qualified Data.Text                   as T
 import           Data.Typeable               (Typeable)
 import           Discord.Token
@@ -55,7 +54,7 @@ askApiKey :: (MonadIO m, Token t) => ReaderT (DiscordConfig t) m t
 askApiKey = dcApiKey <$> ask
 
 -- | Creates a DiscordConfig with a new Manager.
-defaultDiscordConfig :: (MonadIO m, Token t) => t -> m (DiscordConfig t)
+defaultDiscordConfig :: MonadIO m => t -> m (DiscordConfig t)
 defaultDiscordConfig apiKey = do
   man <- liftIO $ newManager tlsManagerSettings
   return $ DiscordConfig apiKey man
@@ -64,17 +63,17 @@ defaultDiscordConfig apiKey = do
 type DiscordT t m a = (MonadIO m, MonadLogger m, MonadBaseControl IO m) => ReaderT (DiscordConfig t) m a
 
 -- | Runs Discord in a monad transformer.
-runDiscordT :: (MonadIO m, MonadLogger m, MonadBaseControl IO m, Token t) => DiscordConfig t -> DiscordT t m a -> m a
+runDiscordT :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => DiscordConfig t -> DiscordT t m a -> m a
 runDiscordT config action =
   runReaderT action config
 
 -- | Runs Discord in IO, ignoring the existing monadic context and without logging.
-runDiscord :: (MonadIO m, Token t) => (DiscordConfig t -> DiscordT t (NoLoggingT IO) a -> m a)
+runDiscord :: MonadIO m => (DiscordConfig t -> DiscordT t (NoLoggingT IO) a -> m a)
 runDiscord config action =
   liftIO $ runNoLoggingT $ runReaderT action config
 
 -- | Runs Discord in IO, ignoring the existing monadic context and logging to stderr.
-runDiscordLogging :: (MonadIO m, Token t) => (DiscordConfig t -> DiscordT t (LoggingT IO) a -> m a)
+runDiscordLogging :: MonadIO m => (DiscordConfig t -> DiscordT t (LoggingT IO) a -> m a)
 runDiscordLogging config action =
   liftIO $ runStderrLoggingT $ runReaderT action config
 
