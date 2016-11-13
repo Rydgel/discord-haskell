@@ -1,12 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
-import Control.Monad.IO.Class (liftIO)
-import Discord
-import Discord.Token
-import Data.Aeson (Value(..))
+import           Control.Monad.IO.Class (liftIO)
+import           Data.Aeson             (Value (..))
+import           Discord
 
 main :: IO ()
 main = do

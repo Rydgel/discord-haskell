@@ -1,6 +1,6 @@
-module Discord.Permission
-    ( Permission (..)
-    , Role (..)
+module Discord.Types.Permission
+    ( Permission(..)
+    , Role(..)
     ) where
 
 

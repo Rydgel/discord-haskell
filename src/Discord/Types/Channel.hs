@@ -1,17 +1,17 @@
-module Discord.Channel
-    ( Channel (..)
-    , Message (..)
-    , Overwrite (..)
-    , Embed (..)
-    , Thumbnail (..)
-    , Provider (..)
-    , Attachment (..)
+module Discord.Types.Channel
+    ( Channel(..)
+    , Message(..)
+    , Overwrite(..)
+    , Embed(..)
+    , Thumbnail(..)
+    , Provider(..)
+    , Attachment(..)
     ) where
 
 
 import           Data.Aeson
-import           Discord.Permission
-import           Discord.User
+import           Discord.Types.Permission
+import           Discord.Types.User
 
 
 data Channel

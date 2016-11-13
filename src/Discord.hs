@@ -13,6 +13,8 @@ module Discord
     , DiscordError (..)
     , query
     , query'
+      -- * Re-exports
+    , module Discord.Types
     ) where
 
 
@@ -34,7 +36,7 @@ import           Data.ByteString.Lazy        (fromStrict)
 import qualified Data.CaseInsensitive        as CI
 import qualified Data.Text                   as T
 import           Data.Typeable               (Typeable)
-import           Discord.Token
+import           Discord.Types
 import           Network.HTTP.Client         (HttpException (..), Manager,
                                               Request (..), RequestBody (..),
                                               Response (..), httpLbs,
@@ -42,22 +44,6 @@ import           Network.HTTP.Client         (HttpException (..), Manager,
 import           Network.HTTP.Client.TLS     (tlsManagerSettings)
 import           Network.HTTP.Types          (Header, methodPost)
 import           Network.HTTP.Types.Header   (ResponseHeaders)
-
-
-data DiscordConfig a = DiscordConfig
-  { dcApiKey  :: Token a => a
-  , dcManager :: Manager
-  }
-
--- | Convenience method to ask ReaderT for the current API key.
-askApiKey :: (MonadIO m, Token t) => ReaderT (DiscordConfig t) m t
-askApiKey = dcApiKey <$> ask
-
--- | Creates a DiscordConfig with a new Manager.
-defaultDiscordConfig :: MonadIO m => t -> m (DiscordConfig t)
-defaultDiscordConfig apiKey = do
-  man <- liftIO $ newManager tlsManagerSettings
-  return $ DiscordConfig apiKey man
 
 -- | The Discord monad, which supports exception and logging
 type DiscordT t m a = (MonadIO m, MonadLogger m, MonadBaseControl IO m) => ReaderT (DiscordConfig t) m a
@@ -76,6 +62,21 @@ runDiscord config action =
 runDiscordLogging :: MonadIO m => (DiscordConfig t -> DiscordT t (LoggingT IO) a -> m a)
 runDiscordLogging config action =
   liftIO $ runStderrLoggingT $ runReaderT action config
+
+data DiscordConfig a = DiscordConfig
+  { dcApiKey  :: a
+  , dcManager :: Manager
+  }
+
+-- | Convenience method to ask ReaderT for the current API key.
+askApiKey :: MonadIO m => ReaderT (DiscordConfig t) m t
+askApiKey = dcApiKey <$> ask
+
+-- | Creates a DiscordConfig with a new Manager.
+defaultDiscordConfig :: MonadIO m => t -> m (DiscordConfig t)
+defaultDiscordConfig apiKey = do
+  man <- liftIO $ newManager tlsManagerSettings
+  return $ DiscordConfig apiKey man
 
 userAgent :: T.Text
 userAgent = "DiscordBot (https://github.com/Rydgel/discord-haskell, v0.1.0.0)"

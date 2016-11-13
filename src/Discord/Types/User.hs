@@ -1,12 +1,12 @@
-module Discord.User
-    ( User (..)
-    , UserGuild (..)
-    , ConnectionObject (..)
+module Discord.Types.User
+    ( User(..)
+    , UserGuild(..)
+    , ConnectionObject(..)
     ) where
 
 
 import           Data.Aeson
-import           Discord.Guild
+import           Discord.Types.Guild
 
 data User = User
   { uId            :: !String
